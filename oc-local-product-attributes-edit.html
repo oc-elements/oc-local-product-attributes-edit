@@ -1,34 +1,314 @@
 <link rel="import" href="../polymer/polymer.html">
+<link rel="import" href="../paper-button/paper-button.html">
+<link rel="import" href="../paper-input/paper-input.html">
+<link rel="import" href="../paper-dropdown-menu/paper-dropdown-menu.html">
+<link rel="import" href="../paper-listbox/paper-listbox.html">
+<link rel="import" href="../paper-item/paper-item.html">
+<link rel="import" href="../paper-tooltip/paper-tooltip.html">
+<link rel="import" href="../paper-icon-button/paper-icon-button.html">
+<link rel="import" href="../paper-toast/paper-toast.html">
+<link rel="import" href="../iron-flex-layout/iron-flex-layout.html">
+<link rel="import" href="../iron-icons/iron-icons.html">
+
+<link rel="import" href="../oc-product-attribute-api.html">
+<link rel="import" href="../oc-product-api.html">
+<link rel="import" href="../oc-product-library-api.html">
 
 <!--
 `oc-local-product-attributes-edit`
 Element to edit local product attributes on the Ordercloud platform
 
-@demo demo/index.html 
+@demo demo/index.html
 -->
 
 <dom-module id="oc-local-product-attributes-edit">
-  <template>
-    <style>
-      :host {
-        display: block;
+
+  <style>
+    :host {
+      display: none;
+    }
+    :host[loaded] {
+      display: block;
+    }
+    .attribute {
+      @apply(--layout-horizontal);
+    }
+    .attribute paper-input,
+    .attribute paper-dropdown-menu {
+      @apply(--layout-flex);
+      --paper-input-container-label: {
+        text-align: left;
       }
-    </style>
-    <h2>Hello [[prop1]]</h2>
+    }
+    .attribute paper-input:first-child {
+      margin-right: 1em;
+      text-align: right;
+    }
+    .attribute paper-input:last-of-type,
+    .attribute paper-dropdown-menu {
+      text-align: left;
+    }
+    .attribute paper-icon-button {
+      margin-top: 1.2em;
+    }
+    paper-button:not([disabled]) {
+      background-color: var(--default-primary-color);
+      color: #FFFFFF;
+    }
+    #actions {
+      text-align: right;
+      margin-top: 1em;
+    }
+    #addAttribute paper-icon-button {
+      background-color: #42A5F5;
+      color: #FFFFFF;
+      --paper-icon-button-ink-color: #FFFFFF;
+    }
+  </style>
+
+  <template>
+
+    <template is="dom-repeat" items="[[ attributes ]]" as="attribute">
+      <div class="attribute">
+        <paper-input value="{{ attribute.name }}" placeholder="Name" label="[[ attribute.description ]]"></paper-input>
+        <paper-input value="{{ attribute.value }}" placeholder="Value" hidden$="[[ _attributeHasOptions(attribute) ]]"></paper-input>
+        <paper-dropdown-menu hidden$="[[ !_attributeHasOptions(attribute) ]]">
+          <paper-listbox class="dropdown-content" selected="{{ attribute.value }}" attr-for-selected="value">
+            <template is="dom-repeat" items="[[ attribute.options ]]" as="option">
+              <paper-item value="[[ option ]]">[[ option ]]</paper-item>
+            </template>
+          </paper-listbox>
+        </paper-dropdown-menu>
+        <span>
+          <paper-icon-button
+                  on-tap="_removeAttribute"
+                  attribute="[[ attribute ]]"
+                  icon="icons:delete"
+                  raised
+                  disabled="[[ attribute.required ]]"
+          >
+          </paper-icon-button>
+          <paper-tooltip>[[ _getTrashTooltipMessage(attribute) ]]</paper-tooltip>
+        </span>
+
+      </div>
+    </template>
+
+    <div id="addAttribute" hidden$="[[ !availableAttributes.length ]]">
+      <paper-dropdown-menu label="Add attribute">
+        <paper-menu class="dropdown-content" id="addAttributeSelector" selected="0">
+          <template is="dom-repeat" items="[[ availableAttributes ]]" as="attribute">
+            <paper-item attribute="[[ attribute ]]">[[ attribute.name ]]</paper-item>
+          </template>
+        </paper-menu>
+      </paper-dropdown-menu>
+      <paper-icon-button on-tap="_addAttribute" icon="icons:add"></paper-icon-button>
+    </div>
+
+    <div id="actions" hidden="[[ _shouldHideSaveBtn(allAttributes.*) ]]">
+      <paper-button raised on-tap="_save" id="saveBtn"><span>Save</span></paper-button>
+    </div>
+
+    <paper-toast id="toast"></paper-toast>
+
+    <oc-product-attribute-api
+            id="attributesApi"
+    ></oc-product-attribute-api>
+
+    <oc-product-api
+            id="productsApi"
+    ></oc-product-api>
+
+    <oc-product-library-api
+            id="productsLibraryApi"
+    ></oc-product-library-api>
+
   </template>
 
   <script>
-    Polymer({
+    (function () {
+      'use strict';
 
-      is: 'oc-local-product-attributes-edit',
+      Polymer({
+        is: 'oc-local-product-attributes-edit',
+        behaviors: [OC.Behaviors.ApiConsumer],
 
-      properties: {
-        prop1: {
+        properties: {
+          productId: Number,
           type: String,
-          value: 'oc-local-product-attributes-edit',
+          dirty: {
+            type: Boolean,
+            value: false,
+          },
+          loaded: {
+            type: Boolean,
+            value: false,
+            reflectToAttribute: true,
+            computed: '_computeLoaded(allAttributes, productAttributes)'
+          },
+          productAttributes: {
+            computed: '_computeProductAttributes(rawProductAttributes, allAttributes)'
+          },
+          requiredAttributes: {
+            computed: '_computeRequiredAttributes(allAttributes)'
+          },
+          availableAttributes: {
+            computed: '_computeAvailableAttributes(allAttributes, attributes.*)'
+          },
+          attributes: {
+            computed: '_computeAttributes(productAttributes, requiredAttributes)'
+          },
         },
-      },
 
-    });
+        observers: [
+          '_refreshAddAttributeSelector(availableAttributes.*, attributes.*)'
+        ],
+
+        load: function() {
+          (this.type === 'library' ? this.$.productsLibraryApi : this.$.productsApi)
+                  .getProductAttributes(this.productId)
+                  .then(this._setPropertyResponseResults.bind(this, 'rawProductAttributes'))
+                  .catch(this.$.toast.show.bind(this.$.toast, 'Failed to load product\'s attributes'));
+          this.$.attributesApi.getAttributes(this.type)
+                  .then(this._setPropertyResponseResults.bind(this, 'allAttributes'))
+                  .catch(this.$.toast.show.bind(this.$.toast, 'Failed to load available attributes'));
+        },
+
+        _save: function() {
+          var attributes = [];
+
+          for (var i = 0, attr; attr = this.attributes[i]; i++) {
+            attr.name = attr.name.trim();
+            attr.value = (attr.value || '').trim();
+
+            if (attr.name.length !== 0) {
+              attributes.push({
+                name: attr.name,
+                value: attr.value,
+              });
+            }
+          }
+
+          this._toggleSaveBtnLoading(true);
+          (this.type === 'library' ? this.$.productsLibraryApi : this.$.productsApi)
+                  .updateProductAttributes(this.productId, attributes)
+                  .catch(this.$.toast.show.bind(this.$.toast, 'Failed to save attributes'))
+                  .finally(this.load.bind(this))
+                  .finally(this._toggleSaveBtnLoading.bind(this, false));
+        },
+
+        _addAttribute: function() {
+          var attribute = this.$.addAttributeSelector.selectedItem.attribute;
+          attribute.value = '';
+          this.push('attributes', attribute);
+        },
+
+        _removeAttribute: function(event) {
+          this.splice('attributes', this.attributes.indexOf(event.target.parentElement.attribute), 1);
+        },
+
+        _refreshAddAttributeSelector: function() {
+          this.$.addAttributeSelector.selected = 10;
+          setTimeout(function() {
+            this.$.addAttributeSelector.selected = 0;
+          }.bind(this), 50);
+        },
+
+        _toggleSaveBtnLoading: function(loading) {
+          this.$.saveBtn.disabled = loading;
+          this.$.saveBtn.children[0].textContent = loading ? 'Saving...' : 'Save';
+        },
+
+        _computeProductAttributes: function(rawProductAttributes, allAttributes) {
+          var productAttributes = [];
+
+          for (var i = 0, rawProductAttribute; rawProductAttribute = rawProductAttributes[i]; i++) {
+            for (var j = 0, attribute; attribute = allAttributes[j]; j++) {
+              if (rawProductAttribute.name === attribute.name) {
+                attribute.value = rawProductAttribute.value;
+                productAttributes.push(attribute);
+                break;
+              }
+            }
+          }
+
+          return productAttributes;
+        },
+
+        _computeRequiredAttributes: function(allAttributes) {
+          var requiredAttributes = [];
+
+          for (var i = 0, attribute; attribute = allAttributes[i]; i++) {
+            if (attribute.required) {
+              requiredAttributes.push(attribute);
+            }
+          }
+
+          return requiredAttributes;
+        },
+
+        _computeAvailableAttributes: function(allAttributes, attributes) {
+          var availableAttributes = [];
+
+          for (var i = 0, attribute; attribute = allAttributes[i]; i++) {
+            if (attribute.required) {
+              continue;
+            }
+            availableAttributes.push(attribute);
+            for (var j = 0, productAttribute; productAttribute = attributes.base[j]; j++) {
+              if (attribute.name === productAttribute.name) {
+                availableAttributes.pop();
+                break;
+              }
+            }
+          }
+
+          return availableAttributes;
+        },
+
+        _computeAttributes: function(productAttributes, requiredAttributes) {
+          var attributes = productAttributes;
+
+          requiredLoop:
+                  for (var i = 0, requiredAttribute; requiredAttribute = requiredAttributes[i]; i++) {
+                    attributeLoop:
+                            for (var j = 0, attribute; attribute = attributes[j]; j++) {
+                              if (requiredAttribute.id === attribute.id) {
+                                continue requiredLoop;
+                              }
+                            }
+                    attributes.push(requiredAttribute);
+                  }
+
+          return attributes;
+        },
+
+        _attributeHasOptions: function(attribute) {
+          return attribute.options.length > 0;
+        },
+
+        _getTrashTooltipMessage: function(attribute) {
+          return attribute.required ? 'Required' : 'Remove';
+        },
+
+        _hasAttributes: function(availableAttributes, attributes) {
+          return (availableAttributes.length + attributes.length) > 0;
+        },
+
+        _computeLoaded: function(allAttributes, attributes) {
+          return allAttributes && attributes;
+        },
+
+        _shouldHideSaveBtn: function(attributes) {
+          if (attributes && attributes.base && attributes.base.length > 0) {
+            return false;
+          }
+
+          return true;
+        },
+
+      });
+    })();
   </script>
+
 </dom-module>
