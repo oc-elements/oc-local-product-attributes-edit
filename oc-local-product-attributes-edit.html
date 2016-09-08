@@ -1,4 +1,15 @@
 <link rel="import" href="../polymer/polymer.html">
+<link rel="import" href="../paper-button/paper-button.html">
+<link rel="import" href="../paper-input/paper-input.html">
+<link rel="import" href="../paper-material/paper-material.html">
+<link rel="import" href="../paper-dropdown-menu/paper-dropdown-menu.html">
+<link rel="import" href="../paper-listbox/paper-listbox.html">
+<link rel="import" href="../paper-item/paper-item.html">
+<link rel="import" href="../paper-tooltip/paper-tooltip.html">
+<link rel="import" href="../paper-icon-button/paper-icon-button.html">
+<link rel="import" href="../paper-toast/paper-toast.html">
+<link rel="import" href="../iron-flex-layout/iron-flex-layout.html">
+<link rel="import" href="../iron-icons/iron-icons.html">
 
 <link rel="import" href="../oc-product-attribute-api/oc-product-attribute-api.html">
 <link rel="import" href="../oc-product-api/oc-product-api.html">
@@ -104,8 +115,6 @@ Element to edit local product attributes on the Ordercloud platform
         },
 
         _computeAttrs : function(allAttributes, productAttributes){
-          console.log('all', allAttributes);
-          console.log('product', productAttributes);
 
           allAttributes.forEach(function(attribute){
             attribute.value = attribute.value || '';
@@ -126,13 +135,10 @@ Element to edit local product attributes on the Ordercloud platform
 
           }.bind(this));
 
-          console.log('prodAttrs', this.productAttributes);
-          console.log('availableAttributes', this.availableAttributes);
 
         },
 
         _addAttribute : function(e) {
-          console.log(e.detail)
           var idx = this.availableAttributes.findIndex(function(obj){ return (obj.id === e.detail.id)});
 
           this.push('productAttributes', e.detail);
@@ -140,7 +146,6 @@ Element to edit local product attributes on the Ordercloud platform
         },
 
         _removeAttribute : function(e) {
-          console.log(e.detail)
           var idx = this.productAttributes.findIndex(function(obj){ return (obj.id === e.detail.id)});
 
           this.push('availableAttributes', e.detail);
