@@ -61,6 +61,7 @@ Element to edit local product attributes on the Ordercloud platform
             type: Number,
             computed: "_computeProductId(product)"
           },
+          loaded: Boolean
           organisationId: Number,
           product : Object,
           productAttributes : {
@@ -92,13 +93,15 @@ Element to edit local product attributes on the Ordercloud platform
 
         refresh : function(){
 
-          if (!this.product) {
+          if (!this.product || this.loaded) {
             return
           }
 
           this.loading = true;
 
           this.getAllAttributes();
+
+          this.loaded = true;
 
         },
 
