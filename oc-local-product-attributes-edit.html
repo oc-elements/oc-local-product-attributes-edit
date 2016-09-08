@@ -13,6 +13,7 @@
 
 <link rel="import" href="../oc-product-attribute-api/oc-product-attribute-api.html">
 <link rel="import" href="../oc-product-api/oc-product-api.html">
+<link rel="import" href="../oc-product-attributes-edit/oc-product-attributes-edit.html">
 
 <!--
 `oc-local-product-attributes-edit`
@@ -67,53 +68,53 @@ Element to edit local product attributes on the Ordercloud platform
   </style>
 
   <template>
-    <template is="dom-repeat" items="[[ productAttributes ]]" as="attribute">
-      <div class="attribute">
-        <paper-input value="{{ attribute.name }}" placeholder="Name" label="[[ attribute.description ]]"></paper-input>
-        <paper-input value="{{ attribute.value }}" placeholder="Value" hidden$="[[ _attributeHasOptions(attribute) ]]"></paper-input>
-        <paper-dropdown-menu hidden$="[[ !_attributeHasOptions(attribute) ]]">
-          <paper-listbox class="dropdown-content" selected="{{ attribute.value }}" attr-for-selected="value">
-            <template is="dom-repeat" items="[[ attribute.options ]]" as="option">
-              <paper-item value="[[ option ]]">[[ option ]]</paper-item>
-            </template>
-          </paper-listbox>
-        </paper-dropdown-menu>
-        <span>
-          <paper-icon-button
-                  on-tap="_removeAttribute"
-                  attribute="[[ attribute ]]"
-                  icon="icons:delete"
-                  raised
-                  disabled="[[ attribute.required ]]"
-          >
-          </paper-icon-button>
-          <paper-tooltip>[[ _getTrashTooltipMessage(attribute) ]]</paper-tooltip>
-        </span>
+    <!--<template is="dom-repeat" items="[[ productAttributes ]]" as="attribute">-->
+    <!--<div class="attribute">-->
+    <!--<paper-input value="{{ attribute.name }}" placeholder="Name" label="[[ attribute.description ]]"></paper-input>-->
+    <!--<paper-input value="{{ attribute.value }}" placeholder="Value" hidden$="[[ _attributeHasOptions(attribute) ]]"></paper-input>-->
+    <!--<paper-dropdown-menu hidden$="[[ !_attributeHasOptions(attribute) ]]">-->
+    <!--<paper-listbox class="dropdown-content" selected="{{ attribute.value }}" attr-for-selected="value">-->
+    <!--<template is="dom-repeat" items="[[ attribute.options ]]" as="option">-->
+    <!--<paper-item value="[[ option ]]">[[ option ]]</paper-item>-->
+    <!--</template>-->
+    <!--</paper-listbox>-->
+    <!--</paper-dropdown-menu>-->
+    <!--<span>-->
+    <!--<paper-icon-button-->
+    <!--on-tap="_removeAttribute"-->
+    <!--attribute="[[ attribute ]]"-->
+    <!--icon="icons:delete"-->
+    <!--raised-->
+    <!--disabled="[[ attribute.required ]]"-->
+    <!--&gt;-->
+    <!--</paper-icon-button>-->
+    <!--<paper-tooltip>[[ _getTrashTooltipMessage(attribute) ]]</paper-tooltip>-->
+    <!--</span>-->
 
-      </div>
-    </template>
+    <!--</div>-->
+    <!--</template>-->
 
-    <div id="addAttribute" hidden$="[[ !availableAttributes.length ]]">
-      <paper-dropdown-menu label="Add attribute">
-        <paper-listbox class="dropdown-content" id="addAttributeSelector" selected="0">
-          <template is="dom-repeat" items="[[ availableAttributes ]]" as="attribute">
-            <paper-item attribute="[[ attribute ]]">[[ attribute.name ]]</paper-item>
-          </template>
-        </paper-listbox>
-      </paper-dropdown-menu>
-      <paper-icon-button on-tap="_addAttribute" icon="icons:add"></paper-icon-button>
-    </div>
+    <!--<div id="addAttribute" hidden$="[[ !availableAttributes.length ]]">-->
+    <!--<paper-dropdown-menu label="Add attribute">-->
+    <!--<paper-listbox class="dropdown-content" id="addAttributeSelector" selected="0">-->
+    <!--<template is="dom-repeat" items="[[ availableAttributes ]]" as="attribute">-->
+    <!--<paper-item attribute="[[ attribute ]]">[[ attribute.name ]]</paper-item>-->
+    <!--</template>-->
+    <!--</paper-listbox>-->
+    <!--</paper-dropdown-menu>-->
+    <!--<paper-icon-button on-tap="_addAttribute" icon="icons:add"></paper-icon-button>-->
+    <!--</div>-->
 
-    <div id="actions" hidden="[[ _shouldHideSaveBtn(allAttributes.*) ]]">
-      <paper-button raised on-tap="_save" id="saveBtn"><span>Save</span></paper-button>
-    </div>
+    <!--<div id="actions" hidden="[[ _shouldHideSaveBtn(allAttributes.*) ]]">-->
+    <!--<paper-button raised on-tap="_save" id="saveBtn"><span>Save</span></paper-button>-->
+    <!--</div>-->
 
 
 
     <paper-toast id="toast"></paper-toast>
 
     <oc-product-attribute-api id="attributesApi" ></oc-product-attribute-api>
-    <oc-product-api  id="productsApi" ></oc-product-api>
+    <oc-product-api  id="prodApi" ></oc-product-api>
 
   </template>
 
@@ -126,12 +127,12 @@ Element to edit local product attributes on the Ordercloud platform
         behaviors: [OC.Behaviours.ApiConsumer],
 
         properties: {
-          productId: Number,
-          organisationId: Number,
-          dirty: {
-            type: Boolean,
-            value: false,
+          productId : {
+            type: Number,
+            computed: "_computeProductId(product)"
           },
+          organisationId: Number,
+          product : Object,
           productAttributes : {
             type: Array,
             value: function(){
@@ -148,195 +149,241 @@ Element to edit local product attributes on the Ordercloud platform
         },
 
         observers: [
-          "_computeProductAttrs(allAttributes)"
+          "_computeAttrs(allAttributes, product.attributes)",
+          "refresh(product)",
+
         ],
 
-        getProductAttributes : function(){
-          return this.$.attributesApi.getAttributes();
+        refresh : function(){
+
+          if (!this.product) {
+            return
+          }
+
+          this.loading = true;
+
+          this.getAllAttributes();
+
         },
+
+        _computeProductId : function(product){
+          return product.id;
+        },
+
 
         getAllAttributes : function(){
-          return this.$.attributesApi.getAttributes();
+          this.$.attributesApi.getAttributes()
+                  .then(this._setPropertyResponseResults.bind(this, 'allAttributes'))
+                  .catch(this.fire.bind(this, 'options_error', 'Could not load attributes'))
+                  .finally(this.set.bind(this, 'loading', false));
         },
 
-        _computeProductAttrs : function(allAttributes){
+        _computeAttrs : function(allAttributes, productAttributes){
+          console.log('all', allAttributes);
+          console.log('product', productAttributes);
 
-          for(var i=0; i<allAttributes.length; i++) {
-            if(allAttributes[i].required){
-              console.log('required', allAttributes[i])
-              this.push('productAttributes', allAttributes[i]);
-            } else {
-              console.log('not required', allAttributes[i])
-              this.push('availableAttributes', allAttributes[i]);
+          allAttributes.forEach(function(attribute){
+            attribute.value = attribute.value || '';
+
+            var isProductAttr = false;
+
+            productAttributes.forEach(function(productAttr){
+              if(attribute.name === productAttr.name) {
+                isProductAttr = true;
+                attribute.value = productAttr.value;
+                this.push('productAttributes', attribute);
+              }
+            }.bind(this));
+
+            if(!isProductAttr){
+              this.push('availableAttributes', attribute);
             }
-          }
+
+          }.bind(this));
+
+          console.log('prodAttrs', this.productAttributes);
+          console.log('availableAttributes', this.availableAttributes);
+
         },
-//          loaded: {
-//            type: Boolean,
-//            value: false,
-//            reflectToAttribute: true,
-//            computed: '_computeLoaded(allAttributes, productAttributes)'
-//          },
+
+//        _computeProductAttrs : function(allAttributes){
 //
-//          productAttributes: {
-//            computed: '_computeProductAttributes(rawProductAttributes, allAttributes)'
-//          },
-//          requiredAttributes: {
-//            computed: '_computeRequiredAttributes(allAttributes)'
-//          },
-//          availableAttributes: {
-//            computed: '_computeAvailableAttributes(allAttributes, productAttributes.*)'
-//          },
-//          attributes: {
-//            computed: '_computeAttributes(productAttributes, requiredAttributes)'
-//          },
+//          for(var i=0; i<allAttributes.length; i++) {
+//            if(allAttributes[i].required){
+//              this.push('productAttributes', allAttributes[i]);
+//            } else {
+//              this.push('availableAttributes', allAttributes[i]);
+//            }
+//          }
 //        },
+////          loaded: {
+////            type: Boolean,
+////            value: false,
+////            reflectToAttribute: true,
+////            computed: '_computeLoaded(allAttributes, productAttributes)'
+////          },
+////
+////          productAttributes: {
+////            computed: '_computeProductAttributes(rawProductAttributes, allAttributes)'
+////          },
+////          requiredAttributes: {
+////            computed: '_computeRequiredAttributes(allAttributes)'
+////          },
+////          availableAttributes: {
+////            computed: '_computeAvailableAttributes(allAttributes, productAttributes.*)'
+////          },
+////          attributes: {
+////            computed: '_computeAttributes(productAttributes, requiredAttributes)'
+////          },
+////        },
+////
+////        observers: [
+////          '_refreshAddAttributeSelector(availableAttributes.*, attributes.*)'
+////        ],
+////
+////        load: function() {
+////          console.log("called")
+////          this.$.productsApi.getProductAttributes(this.productId)
+////                  .then(this._setPropertyResponseResults.bind(this, 'rawProductAttributes'))
+////                  .catch(this.$.toast.show.bind(this.$.toast, 'Failed to load product\'s attributes'));
+////          this.$.attributesApi.getAttributes()
+////                  .then(this._setPropertyResponseResults.bind(this, 'allAttributes'))
+////                  .catch(this.$.toast.show.bind(this.$.toast, 'Failed to load available attributes'));
+////        },
+////
+//        _save: function() {
+//          var attributes = [];
 //
-//        observers: [
-//          '_refreshAddAttributeSelector(availableAttributes.*, attributes.*)'
-//        ],
+//          for (var i = 0, attr; attr = this.productAttributes[i]; i++) {
+//            attr.name = attr.name.trim();
+//            attr.value = (attr.value || '').trim();
 //
-//        load: function() {
-//          console.log("called")
-//          this.$.productsApi.getProductAttributes(this.productId)
-//                  .then(this._setPropertyResponseResults.bind(this, 'rawProductAttributes'))
-//                  .catch(this.$.toast.show.bind(this.$.toast, 'Failed to load product\'s attributes'));
-//          this.$.attributesApi.getAttributes()
-//                  .then(this._setPropertyResponseResults.bind(this, 'allAttributes'))
-//                  .catch(this.$.toast.show.bind(this.$.toast, 'Failed to load available attributes'));
-//        },
-//
-        _save: function() {
-          var attributes = [];
-
-          for (var i = 0, attr; attr = this.productAttributes[i]; i++) {
-            attr.name = attr.name.trim();
-            attr.value = (attr.value || '').trim();
-
-            if (attr.name.length !== 0) {
-              attributes.push({
-                name: attr.name,
-                value: attr.value,
-              });
-            }
-          }
-
-          this._toggleSaveBtnLoading(true);
-          this.$.productsApi.updateProductAttributes(this.productId, attributes)
-                  .catch(this.$.toast.show.bind(this.$.toast, 'Failed to save attributes'))
-                  .finally(this._toggleSaveBtnLoading.bind(this, false));
-        },
-//
-        _addAttribute: function() {
-          var attribute = this.$.addAttributeSelector.selectedItem.attribute;
-          attribute.value = '';
-          this.push('productAttributes', attribute);
-          this.splice('availableAttributes', this.productAttributes.indexOf(event.target.parentElement.attribute), 1);
-        },
-
-        _removeAttribute: function(event) {
-          var attribute = Polymer.dom(event).localTarget.attribute;
-          this.push('availableAttributes', attribute);
-          this.splice('productAttributes', this.availableAttributes.indexOf(event.target.parentElement.attribute), 1);
-        },
-//
-//        _refreshAddAttributeSelector: function() {
-//          this.$.addAttributeSelector.selected = 10;
-//          setTimeout(function() {
-//            this.$.addAttributeSelector.selected = 0;
-//          }.bind(this), 50);
-//        },
-//
-        _toggleSaveBtnLoading: function(loading) {
-          this.$.saveBtn.disabled = loading;
-          this.$.saveBtn.children[0].textContent = loading ? 'Saving...' : 'Save';
-        },
-//
-//        _computeProductAttributes: function(rawProductAttributes, allAttributes) {
-//          var productAttributes = [];
-//
-//          for (var i = 0, rawProductAttribute; rawProductAttribute = rawProductAttributes[i]; i++) {
-//            for (var j = 0, attribute; attribute = allAttributes[j]; j++) {
-//              if (rawProductAttribute.name === attribute.name) {
-//                attribute.value = rawProductAttribute.value;
-//                productAttributes.push(attribute);
-//                break;
-//              }
+//            if (attr.name.length !== 0) {
+//              attributes.push({
+//                name: attr.name,
+//                value: attr.value,
+//              });
 //            }
 //          }
 //
-//          return productAttributes;
+//          console.log('attr to save', attributes);
+//
+//          this._toggleSaveBtnLoading(true);
+//          this.$.productsApi.updateProductAttributes(this.productId, attributes)
+//                  .catch(this.$.toast.show.bind(this.$.toast, 'Failed to save attributes'))
+//                  .finally(this._toggleSaveBtnLoading.bind(this, false));
 //        },
 //
-//        _computeRequiredAttributes: function(allAttributes) {
-//          var requiredAttributes = [];
+//        _addAttribute: function() {
+//          var attribute = this.$.addAttributeSelector.selectedItem.attribute;
+//          attribute.value = '';
+//          this.push('productAttributes', attribute);
+//          this.splice('availableAttributes', this.productAttributes.indexOf(event.target.parentElement.attribute), 1);
+//        },
 //
-//          for (var i = 0, attribute; attribute = allAttributes[i]; i++) {
-//            if (attribute.required) {
-//              requiredAttributes.push(attribute);
-//            }
+//        _removeAttribute: function(event) {
+//          var attribute = Polymer.dom(event).localTarget.attribute;
+//          this.push('availableAttributes', attribute);
+//          this.splice('productAttributes', this.availableAttributes.indexOf(event.target.parentElement.attribute), 1);
+//        },
+////
+////        _refreshAddAttributeSelector: function() {
+////          this.$.addAttributeSelector.selected = 10;
+////          setTimeout(function() {
+////            this.$.addAttributeSelector.selected = 0;
+////          }.bind(this), 50);
+////        },
+////
+//        _toggleSaveBtnLoading: function(loading) {
+//          this.$.saveBtn.disabled = loading;
+//          this.$.saveBtn.children[0].textContent = loading ? 'Saving...' : 'Save';
+//        },
+////
+////        _computeProductAttributes: function(rawProductAttributes, allAttributes) {
+////          var productAttributes = [];
+////
+////          for (var i = 0, rawProductAttribute; rawProductAttribute = rawProductAttributes[i]; i++) {
+////            for (var j = 0, attribute; attribute = allAttributes[j]; j++) {
+////              if (rawProductAttribute.name === attribute.name) {
+////                attribute.value = rawProductAttribute.value;
+////                productAttributes.push(attribute);
+////                break;
+////              }
+////            }
+////          }
+////
+////          return productAttributes;
+////        },
+////
+////        _computeRequiredAttributes: function(allAttributes) {
+////          var requiredAttributes = [];
+////
+////          for (var i = 0, attribute; attribute = allAttributes[i]; i++) {
+////            if (attribute.required) {
+////              requiredAttributes.push(attribute);
+////            }
+////          }
+////
+////          return requiredAttributes;
+////        },
+////
+////        _computeAvailableAttributes: function(allAttributes, attributes) {
+////          var availableAttributes = [];
+////
+////          for (var i = 0, attribute; attribute = allAttributes[i]; i++) {
+////            if (attribute.required) {
+////              continue;
+////            }
+////            availableAttributes.push(attribute);
+////            for (var j = 0, productAttribute; productAttribute = attributes.base[j]; j++) {
+////              if (attribute.name === productAttribute.name) {
+////                availableAttributes.pop();
+////                break;
+////              }
+////            }
+////          }
+////
+////          return availableAttributes;
+////        },
+////
+////        _computeAttributes: function(productAttributes, requiredAttributes) {
+////          var attributes = productAttributes;
+////
+////                  for (var i = 0, requiredAttribute; requiredAttribute = requiredAttributes[i]; i++) {
+////                            for (var j = 0, attribute; attribute = attributes[j]; j++) {
+////                              if (requiredAttribute.id !== attribute.id) {
+////                                break;
+////                              }
+////                            }
+////                    attributes.push(requiredAttribute);
+////                  }
+////
+////          return attributes;
+////        },
+////
+//        _attributeHasOptions: function(attribute) {
+//          return attribute.options.length > 0;
+//        },
+////
+//        _getTrashTooltipMessage: function(attribute) {
+//          return attribute.required ? 'Required' : 'Remove';
+//        },
+////
+////        _hasAttributes: function(availableAttributes, attributes) {
+////          return (availableAttributes.length + attributes.length) > 0;
+////        },
+////
+////        _computeLoaded: function(allAttributes, attributes) {
+////          return allAttributes && attributes;
+////        },
+////
+//        _shouldHideSaveBtn: function(attributes) {
+//          if (attributes && attributes.base && attributes.base.length > 0) {
+//            return false;
 //          }
 //
-//          return requiredAttributes;
+//          return true;
 //        },
-//
-//        _computeAvailableAttributes: function(allAttributes, attributes) {
-//          var availableAttributes = [];
-//
-//          for (var i = 0, attribute; attribute = allAttributes[i]; i++) {
-//            if (attribute.required) {
-//              continue;
-//            }
-//            availableAttributes.push(attribute);
-//            for (var j = 0, productAttribute; productAttribute = attributes.base[j]; j++) {
-//              if (attribute.name === productAttribute.name) {
-//                availableAttributes.pop();
-//                break;
-//              }
-//            }
-//          }
-//
-//          return availableAttributes;
-//        },
-//
-//        _computeAttributes: function(productAttributes, requiredAttributes) {
-//          var attributes = productAttributes;
-//
-//                  for (var i = 0, requiredAttribute; requiredAttribute = requiredAttributes[i]; i++) {
-//                            for (var j = 0, attribute; attribute = attributes[j]; j++) {
-//                              if (requiredAttribute.id !== attribute.id) {
-//                                break;
-//                              }
-//                            }
-//                    attributes.push(requiredAttribute);
-//                  }
-//
-//          return attributes;
-//        },
-//
-        _attributeHasOptions: function(attribute) {
-          return attribute.options.length > 0;
-        },
-//
-        _getTrashTooltipMessage: function(attribute) {
-          return attribute.required ? 'Required' : 'Remove';
-        },
-//
-//        _hasAttributes: function(availableAttributes, attributes) {
-//          return (availableAttributes.length + attributes.length) > 0;
-//        },
-//
-//        _computeLoaded: function(allAttributes, attributes) {
-//          return allAttributes && attributes;
-//        },
-//
-        _shouldHideSaveBtn: function(attributes) {
-          if (attributes && attributes.base && attributes.base.length > 0) {
-            return false;
-          }
-
-          return true;
-        },
 
       });
     })();
